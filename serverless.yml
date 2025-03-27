@@ -6,7 +6,7 @@ provider:
   name: aws
   runtime: nodejs18.x
   stage: ${opt:stage, 'dev'}
-  region: ${opt:region, 'us-east-1'}
+  region: ${opt:region, 'ap-southeast-1'}
   environment:
     NODE_ENV: ${self:provider.stage}
   iamRoleStatements:
