@@ -1,0 +1,177 @@
+service: datashop-api
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+  environment:
+    NODE_ENV: ${self:provider.stage}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+        - dynamodb:BatchGetItem
+        - dynamodb:BatchWriteItem
+      Resource:
+        - !GetAtt NodesTable.Arn
+        - !GetAtt EdgesTable.Arn
+        - !Join ["", [!GetAtt NodesTable.Arn, "/index/*"]]
+        - !Join ["", [!GetAtt EdgesTable.Arn, "/index/*"]]
+
+functions:
+  # Node functions
+  createNode:
+    handler: src/handlers/nodes/create.handler
+    events:
+      - httpApi:
+          path: /nodes
+          method: post
+
+  getNode:
+    handler: src/handlers/nodes/get.handler
+    events:
+      - httpApi:
+          path: /nodes/{nodeId}
+          method: get
+
+  updateNode:
+    handler: src/handlers/nodes/update.handler
+    events:
+      - httpApi:
+          path: /nodes/{nodeId}
+          method: put
+
+  deleteNode:
+    handler: src/handlers/nodes/delete.handler
+    events:
+      - httpApi:
+          path: /nodes/{nodeId}
+          method: delete
+
+  listNodes:
+    handler: src/handlers/nodes/list.handler
+    events:
+      - httpApi:
+          path: /nodes
+          method: get
+
+  # Edge functions
+  createEdge:
+    handler: src/handlers/edges/create.handler
+    events:
+      - httpApi:
+          path: /edges
+          method: post
+
+  getEdge:
+    handler: src/handlers/edges/get.handler
+    events:
+      - httpApi:
+          path: /edges/{edgeId}
+          method: get
+
+  listEdges:
+    handler: src/handlers/edges/list.handler
+    events:
+      - httpApi:
+          path: /edges
+          method: get
+
+  deleteEdge:
+    handler: src/handlers/edges/delete.handler
+    events:
+      - httpApi:
+          path: /edges/{edgeId}
+          method: delete
+
+  # Output generation
+  getOutput:
+    handler: src/handlers/outputs/get.handler
+    events:
+      - httpApi:
+          path: /outputs/{outputNodeId}
+          method: get
+    timeout: 30 # Allow more time for processing complex graphs
+
+resources:
+  Resources:
+    NodesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-${self:provider.stage}-nodes
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: nodeId
+            AttributeType: S
+          - AttributeName: projectId
+            AttributeType: S
+          - AttributeName: nodeType
+            AttributeType: S
+        KeySchema:
+          - AttributeName: nodeId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: projectIdIndex
+            KeySchema:
+              - AttributeName: projectId
+                KeyType: HASH
+              - AttributeName: nodeType
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+    EdgesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-${self:provider.stage}-edges
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: edgeId
+            AttributeType: S
+          - AttributeName: sourceNodeId
+            AttributeType: S
+          - AttributeName: targetNodeId
+            AttributeType: S
+          - AttributeName: edgeType
+            AttributeType: S
+        KeySchema:
+          - AttributeName: edgeId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: sourceNodeIdIndex
+            KeySchema:
+              - AttributeName: sourceNodeId
+                KeyType: HASH
+              - AttributeName: edgeType
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: targetNodeIdIndex
+            KeySchema:
+              - AttributeName: targetNodeId
+                KeyType: HASH
+              - AttributeName: edgeType
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+plugins:
+  - serverless-offline
+  - serverless-dotenv-plugin
+  - serverless-webpack
+
+custom:
+  webpack:
+    webpackConfig: webpack.config.js
+    includeModules: true
+    packager: npm
+  serverless-offline:
+    httpPort: 3000
